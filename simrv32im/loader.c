@@ -107,6 +107,34 @@ typedef struct __attribute__((packed)) Elf32_Phdr {
   Elf32_Word p_align;
 } Elf32_Phdr;
 
+static uint32_t fromLE32(uint32_t v)
+{
+  uint32_t res;
+  union {
+    uint32_t v;
+    uint8_t bytes[4];
+  } in;
+  in.v = v;
+  res = (uint32_t)in.bytes[0];
+  res |= (uint32_t)in.bytes[1] << 8;
+  res |= (uint32_t)in.bytes[2] << 16;
+  res |= (uint32_t)in.bytes[3] << 24;
+  return res;
+}
+
+static uint16_t fromLE16(uint16_t v)
+{
+  uint16_t res;
+  union {
+    uint16_t v;
+    uint8_t bytes[2];
+  } in;
+  in.v = v;
+  res = (uint16_t)in.bytes[0];
+  res |= (uint16_t)in.bytes[1] << 8;
+  return res;
+}
+
 t_ldrError ldrLoadELF(const char *path)
 {
   t_ldrError res = LDR_NO_ERROR;
@@ -125,43 +153,49 @@ t_ldrError ldrLoadELF(const char *path)
       header.e_ident[EI_CLASS] != ELFCLASS32 ||
       header.e_ident[EI_DATA] != ELFDATA2LSB || header.e_ident[EI_VERSION] != 1)
     goto invalid_file;
-  if (header.e_type != ET_EXEC || header.e_version != 1)
+  if (fromLE16(header.e_type) != ET_EXEC || fromLE32(header.e_version) != 1)
     goto invalid_file;
-  if (header.e_machine != EM_RISCV)
+  if (fromLE16(header.e_machine) != EM_RISCV)
     goto invalid_arch;
 
-  off_t phnum = header.e_phnum;
-  off_t phoff = header.e_phoff;
-  off_t phentsize = header.e_phentsize;
+  off_t phnum = fromLE16(header.e_phnum);
+  off_t phoff = fromLE32(header.e_phoff);
+  off_t phentsize = fromLE16(header.e_phentsize);
   for (off_t phi = 0; phi < phnum; phi++) {
     Elf32_Phdr segment;
     fseeko(fp, phoff + phi * phentsize, SEEK_SET);
     if (fread(&segment, sizeof(Elf32_Phdr), 1, fp) < 1)
       goto read_error;
 
-    if (segment.p_type == PT_NULL || segment.p_type == PT_NOTE)
+    Elf32_Word ptype = fromLE32(segment.p_type);
+    if (ptype == PT_NULL || ptype == PT_NOTE)
       continue;
-    if (segment.p_type != PT_LOAD)
+    if (ptype != PT_LOAD)
       goto invalid_file;
 
+    Elf32_Off poffset = fromLE32(segment.p_offset);
+    Elf32_Word pfilesz = fromLE32(segment.p_filesz);
+    Elf32_Word pvaddr = fromLE32(segment.p_vaddr);
+    Elf32_Word pmemsz = fromLE32(segment.p_memsz);
     dbgPrintf("Loaded section at 0x%08" PRIx32 " (size=0x%08" PRIx32
               ") to 0x%08" PRIx32 " (size=0x%08" PRIx32 ")\n",
-        segment.p_offset, segment.p_filesz, segment.p_vaddr, segment.p_memsz);
-    if (segment.p_memsz > 0) {
+        poffset, pfilesz, pvaddr, pmemsz);
+    if (pmemsz > 0) {
       uint8_t *buf;
-      if (memMapArea(segment.p_vaddr, segment.p_memsz, &buf) != MEM_NO_ERROR)
+      if (memMapArea(pvaddr, pmemsz, &buf) != MEM_NO_ERROR)
         goto mem_error;
-      if (segment.p_filesz > 0) {
-        fseeko(fp, (off_t)segment.p_offset, SEEK_SET);
-        size_t readsz = MIN(segment.p_memsz, segment.p_filesz);
+      if (pfilesz > 0) {
+        fseeko(fp, (off_t)poffset, SEEK_SET);
+        size_t readsz = MIN(pmemsz, pfilesz);
         if (fread(buf, readsz, 1, fp) < 1)
           goto read_error;
       }
     }
   }
 
-  dbgPrintf("Setting the entry point to 0x%" PRIx32 "\n", header.e_entry);
-  cpuReset(header.e_entry);
+  Elf32_Addr entry = fromLE32(header.e_entry);
+  dbgPrintf("Setting the entry point to 0x%" PRIx32 "\n", entry);
+  cpuReset(entry);
 
   goto cleanup;
 mem_error:

@@ -96,6 +96,31 @@ typedef struct __attribute__((packed)) Elf32_Shdr {
 } Elf32_Shdr;
 
 
+static uint32_t toLE32(uint32_t v)
+{
+  union {
+    uint32_t word;
+    uint8_t bytes[4];
+  } res;
+  res.bytes[0] = v & 0xFF;
+  res.bytes[1] = (v >> 8) & 0xFF;
+  res.bytes[2] = (v >> 16) & 0xFF;
+  res.bytes[3] = (v >> 24) & 0xFF;
+  return res.word;
+}
+
+static uint16_t toLE16(uint16_t v)
+{
+  union {
+    uint16_t word;
+    uint8_t bytes[2];
+  } res;
+  res.bytes[0] = v & 0xFF;
+  res.bytes[1] = (v >> 8) & 0xFF;
+  return res.word;
+}
+
+
 typedef struct t_outStrTbl {
   char *buf;
   size_t bufSz;
@@ -139,16 +164,16 @@ Elf32_Shdr outputStrTabToELFSHdr(
 {
   Elf32_Shdr shdr = {0};
 
-  shdr.sh_name = name;
-  shdr.sh_type = SHT_STRTAB;
-  shdr.sh_flags = SHF_STRINGS;
-  shdr.sh_addr = 0;
-  shdr.sh_offset = fileOffset;
-  shdr.sh_size = (Elf32_Word)tbl->tail;
-  shdr.sh_link = SHN_UNDEF;
-  shdr.sh_info = 0;
-  shdr.sh_addralign = 0;
-  shdr.sh_entsize = 0;
+  shdr.sh_name = toLE32(name);
+  shdr.sh_type = toLE32(SHT_STRTAB);
+  shdr.sh_flags = toLE32(SHF_STRINGS);
+  shdr.sh_addr = toLE32(0);
+  shdr.sh_offset = toLE32(fileOffset);
+  shdr.sh_size = toLE32((Elf32_Word)tbl->tail);
+  shdr.sh_link = toLE32(SHN_UNDEF);
+  shdr.sh_info = toLE32(0);
+  shdr.sh_addralign = toLE32(0);
+  shdr.sh_entsize = toLE32(0);
 
   return shdr;
 }
@@ -169,13 +194,13 @@ Elf32_Phdr outputSecToELFPHdr(
   Elf32_Phdr phdr = {0};
   uint32_t secSize = objSecGetSize(sec);
 
-  phdr.p_type = PT_LOAD;
-  phdr.p_vaddr = objSecGetStart(sec);
-  phdr.p_offset = fileOffset;
-  phdr.p_filesz = secSize;
-  phdr.p_memsz = secSize;
-  phdr.p_flags = flags;
-  phdr.p_align = 0;
+  phdr.p_type = toLE32(PT_LOAD);
+  phdr.p_vaddr = toLE32(objSecGetStart(sec));
+  phdr.p_offset = toLE32(fileOffset);
+  phdr.p_filesz = toLE32(secSize);
+  phdr.p_memsz = toLE32(secSize);
+  phdr.p_flags = toLE32(flags);
+  phdr.p_align = toLE32(0);
 
   return phdr;
 }
@@ -185,16 +210,16 @@ Elf32_Shdr outputSecToELFSHdr(
 {
   Elf32_Shdr shdr = {0};
 
-  shdr.sh_name = name;
-  shdr.sh_type = SHT_PROGBITS;
-  shdr.sh_flags = flags;
-  shdr.sh_addr = objSecGetStart(sec);
-  shdr.sh_offset = fileOffset;
-  shdr.sh_size = objSecGetSize(sec);
-  shdr.sh_link = SHN_UNDEF;
-  shdr.sh_info = 0;
-  shdr.sh_addralign = 0;
-  shdr.sh_entsize = 0;
+  shdr.sh_name = toLE32(name);
+  shdr.sh_type = toLE32(SHT_PROGBITS);
+  shdr.sh_flags = toLE32(flags);
+  shdr.sh_addr = toLE32(objSecGetStart(sec));
+  shdr.sh_offset = toLE32(fileOffset);
+  shdr.sh_size = toLE32(objSecGetSize(sec));
+  shdr.sh_link = toLE32(SHN_UNDEF);
+  shdr.sh_info = toLE32(0);
+  shdr.sh_addralign = toLE32(0);
+  shdr.sh_entsize = toLE32(0);
 
   return shdr;
 }
@@ -220,7 +245,7 @@ t_outError outputSecContentToFile(FILE *fp, off_t whence, t_objSection *sec)
       }
     } else if (itm->class == OBJ_SEC_ITM_CLASS_ALIGN_DATA) {
       if (itm->body.alignData.nopFill) {
-        uint32_t tmp = 0x00000013; // nop = addi x0, x0, 0
+        uint32_t tmp = toLE32(0x00000013); // nop = addi x0, x0, 0
         assert((itm->body.alignData.effectiveSize % 4) == 0);
         for (int i = 0; i < itm->body.alignData.effectiveSize; i += 4)
           if (fwrite(&tmp, sizeof(uint32_t), 1, fp) < 1)
@@ -274,26 +299,26 @@ t_outError outputToELF(t_object *obj, const char *fname)
   head.e.e_ident[EI_CLASS] = ELFCLASS32;
   head.e.e_ident[EI_DATA] = ELFDATA2LSB;
   head.e.e_ident[EI_VERSION] = 1;
-  head.e.e_type = ET_EXEC;
-  head.e.e_machine = EM_RISCV;
-  head.e.e_version = 1;
-  head.e.e_phoff = (Elf32_Off)((intptr_t)head.p - (intptr_t)&head.e);
-  head.e.e_shoff = (Elf32_Off)((intptr_t)head.s - (intptr_t)&head.e);
-  head.e.e_flags = 0;
-  head.e.e_ehsize = sizeof(Elf32_Ehdr);
-  head.e.e_phentsize = sizeof(Elf32_Phdr);
-  head.e.e_phnum = PRG_NUM;
-  head.e.e_shentsize = sizeof(Elf32_Shdr);
-  head.e.e_shnum = SEC_NUM;
-  head.e.e_shstrndx = SEC_ID_SYMTAB;
+  head.e.e_type = toLE16(ET_EXEC);
+  head.e.e_machine = toLE16(EM_RISCV);
+  head.e.e_version = toLE32(1);
+  head.e.e_phoff = toLE32((Elf32_Off)((intptr_t)head.p - (intptr_t)&head.e));
+  head.e.e_shoff = toLE32((Elf32_Off)((intptr_t)head.s - (intptr_t)&head.e));
+  head.e.e_flags = toLE32(0);
+  head.e.e_ehsize = toLE16(sizeof(Elf32_Ehdr));
+  head.e.e_phentsize = toLE16(sizeof(Elf32_Phdr));
+  head.e.e_phnum = toLE16(PRG_NUM);
+  head.e.e_shentsize = toLE16(sizeof(Elf32_Shdr));
+  head.e.e_shnum = toLE16(SEC_NUM);
+  head.e.e_shstrndx = toLE16(SEC_ID_SYMTAB);
 
   t_objLabel *l_entry = objFindLabel(obj, "_start");
   if (!l_entry) {
     emitWarning(nullFileLocation,
         "_start symbol not found, entry will be start of .text section");
-    head.e.e_entry = objSecGetStart(text);
+    head.e.e_entry = toLE32(objSecGetStart(text));
   } else {
-    head.e.e_entry = objLabelGetPointer(l_entry);
+    head.e.e_entry = toLE32(objLabelGetPointer(l_entry));
   }
 
   Elf32_Addr textAddr = sizeof(t_outputELFHead);
