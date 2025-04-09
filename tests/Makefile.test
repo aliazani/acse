@@ -1,18 +1,20 @@
-#ASM:=riscv-none-embed-gcc -ffreestanding -nostdlib -march=rv32im -mno-relax
 ASM:=../../bin/asrv32im
 ACSE:=../../bin/acse
-acse_file=$(ACSE)
-# add .exe at the end on Windows
-ifeq ($(OS), Windows_NT)
-   acse_file=$(ACSE).exe
-endif
 
-objects=$(patsubst %.src,%.o,$(wildcard *.src))
+SRC=$(wildcard *.src)
+OBJS=$(patsubst %.src,%.o,$(SRC))
+
+# This is used to ensure sources are recompiled when ACSE changes
+ifeq ($(OS), Windows_NT)
+ACSE_FILE:=$(ACSE).exe
+else
+ACSE_FILE:=$(ACSE)
+endif
 
 .PHONY: test
 ifeq (,$(wildcard _NO_TEST_))
 # the '_NO_TEST_' file does not exist
-test: $(objects)
+test: $(OBJS)
 else
 # the '_NO_TEST_' file does exist
 test:
@@ -23,7 +25,7 @@ endif
 	$(ASM) $< -o $@
 
 .PRECIOUS: %.s
-%.s: %.src $(acse_file)
+%.s: %.src $(ACSE_FILE)
 	$(ACSE) $< -o $@
 
 .PHONY: clean 

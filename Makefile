@@ -14,7 +14,7 @@ asrv32im:
 	$(MAKE) -C asrv32im
 
 .PHONY: tests
-tests: 
+tests: acse simrv32im asrv32im
 	$(MAKE) -C tests
 
 .PHONY: clean
@@ -24,5 +24,3 @@ clean:
 	$(MAKE) -C asrv32im clean
 	$(MAKE) -C tests clean
 	rm -rf bin
-
-.PHONY : all clean tests executor asm compiler

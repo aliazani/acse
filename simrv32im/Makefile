@@ -1,40 +1,37 @@
-bindir = ../bin
-project = $(bindir)/simrv32im
-override CFLAGS += 
-override LDFLAGS +=
+TARGET_DIR:=../bin
+TARGET:=$(TARGET_DIR)/simrv32im
 
-objdir = ./obj
-override CFLAGS += -I$(objdir) -I.
+C_SRC:=simrv32im.c cpu.c debugger.c isa.c loader.c memory.c supervisor.c
+CFLAGS:=-g --std=c99
 
-c_src = $(wildcard *.c)
+BUILD_DIR:=build
+OBJS:=$(patsubst %,$(BUILD_DIR)/%,$(C_SRC:.c=.o))
+DEPS:=$(OBJS:.o=.d)
 
-c_objects = $(patsubst %, $(objdir)/%, $(c_src:.c=.o))
-object = $(c_objects)
-deps = $(object:.o=.d)
+.PHONY: all
+all: $(TARGET)
 
-.PHONY: all clean
+-include $(DEPS)
 
-all: $(project)
+$(TARGET): $(OBJS) $(TARGET_DIR)
+	$(CC) $(LDFLAGS) $(OBJS) -o $@
 
--include $(deps)
-
-$(project): $(object) $(bindir)
-	$(CC) $(LDFLAGS) $(object) -o $@
-
-$(objdir)/%.o: %.c
+$(BUILD_DIR)/%.o: %.c
 	$(CC) $(CFLAGS) -MMD -c -o $@ $<
 
-$(object): | $(objdir)
+$(OBJS): | $(BUILD_DIR)
 
-$(objdir):
+$(BUILD_DIR):
 	mkdir -p $@
 
-$(bindir):
+$(TARGET_DIR):
 	mkdir -p $@
 
+.PHONY: check
 check:
 	$(MAKE) -C tests
 
+.PHONY: clean
 clean:
-	rm -rf $(objdir)
-	rm -f $(project) $(project:=.exe)
+	rm -rf $(BUILD_DIR)
+	rm -f $(TARGET) $(TARGET:=.exe)

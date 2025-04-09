@@ -1,12 +1,21 @@
-dirs:=$(patsubst %/,%,$(shell echo */)) # automatically lists the dirs
+TEST_DIRS:=$(patsubst %/,%,$(shell echo */)) # automatically lists the dirs
+
+# Fake target names, one per directory
+TEST_DIRS_ALL:=$(patsubst %,%.all,$(TEST_DIRS))
+TEST_DIRS_CLEAN:=$(patsubst %,%.clean,$(TEST_DIRS))
+
+.PHONY: $(TEST_DIRS)
 
 .PHONY: test
-test: $(dirs)
+test: $(TEST_DIRS_ALL)
 
-.PHONY: $(dirs)
-$(dirs):
-	$(MAKE) -C $@ -f ../Makefile.test
+.PHONY: %.all
+%.all: %
+	$(MAKE) -C $< -f ../Makefile.test
 
 .PHONY: clean
-clean:
-	for i in $(dirs); do $(MAKE) -C $$i -f ../Makefile.test clean ; done
+clean: $(TEST_DIRS_CLEAN)
+
+.PHONY: %.clean
+%.clean: %
+	$(MAKE) -C $< -f ../Makefile.test clean
